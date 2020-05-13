@@ -1,0 +1,86 @@
+addpath('/home/jjacob2/matlab/GSW/')
+
+%Cross channel variation 
+Easta = load('/home/jjacob2/matlab/SanJuanChannel/rbrEAST_A.mat');
+Eastb = load('/home/jjacob2/matlab/SanJuanChannel/rbrEAST_B.mat');
+
+West = load('/home/jjacob2/matlab/SanJuanChannel/rbrWEST.mat');
+
+%remove mean from each pressure signal
+%combine East slip ts
+Epres1 = Easta.ctd.pr - nanmean(Easta.ctd.pr);
+Epres2 = Eastb.ctd.pr - nanmean(Eastb.ctd.pr);
+
+%time check to equalize deployment times
+% tdif = West.ctd.time(1:end-7) - [Easta.ctd.time(1:end); Easta.ctd.time(end)+0.0035; Eastb.ctd.time];
+% time = West.ctd.time(1:end-7);
+Epres = [Epres1; NaN; Epres2];
+
+%Interpolate over added nan
+Ieast = find(isnan(Epres));
+slpE = (Epres(Ieast+1)-Epres(Ieast-1))/2;
+Epres(Ieast) = Epres(Ieast-1)+slpE*1;
+
+Wpres0 = West.ctd.pr(1:end-7) - nanmean(West.ctd.pr(1:end-7));
+
+Pdif0 = Epres - Wpres0(1:size(Epres,1));
+
+%locate slip
+Pdifdif = diff(Pdif0);
+I = find(Pdifdif == nanmin(Pdifdif));
+
+%find magnitude of slip
+window = 3;
+slip = Wpres0(I+window)-Wpres0(I-window);
+
+%recompute mean for west timeseries
+Wpres1 = West.ctd.pr(1:I-window) - nanmean(West.ctd.pr(1:I-window));
+Wpres2 = West.ctd.pr((I+window):end-7) - nanmean(West.ctd.pr((I+window):end-7))+slip;
+Wpres = [Wpres1;NaN([2*window-1,1]); Wpres2];
+
+%linear interp over nan window
+slp = (Wpres(I+window)-Wpres(I-window))/((I+window)-(I-window));
+pInt =Wpres(I-window)+slp.*(1:5);
+
+Wpres((I-window+1):(I+window-1)) = pInt;
+
+%east west difference
+Pdif = Epres - Wpres;
+
+%compute spectra
+ts = 5*60;
+fs = 1/ts;
+[pxx,f] = pwelch(Pdif, [],[],[], fs);
+
+
+loglog(1./f/3600,pxx); set(gca,'xdir','reverse');
+% xline(2*pi*gsw_f(48.5))
+% xline(2*pi/(12.4*60*60))
+figure(2)
+h1= subplot(3,1,1);
+plot(time, Epres)
+% xlim([nanmin(West.ctd.time), nanmax(West.ctd.time)])
+%ylim([29, 31])
+title('East')
+ 
+h2=subplot(3,1,2);
+plot(time, Wpres)
+% xlim([nanmin(West.ctd.time), nanmax(West.ctd.time)])
+%ylim([29, 31])
+title('West')
+
+h3=subplot(3,1,3);
+plot(time, Pdif)
+% xlim([nanmin(West.ctd.time), nanmax(West.ctd.time)])
+title('P diff (East - West)')
+
+linkaxes([h1, h2, h3],'x')
+
+% figure(2)
+% plot(East.ctd.time, Epres)
+% hold on
+% plot(West.ctd.time, Wpres)
+
+%clean data
+%linear interp for nans
+% pwelsh for spectra
